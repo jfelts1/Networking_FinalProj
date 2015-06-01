@@ -91,6 +91,7 @@ int main()
         newSocket = accept(welcomeSocket, (struct sockaddr *) &serverStorage, &addr_size);
         //receive client info
         recved = recieveClientInfo(newSocket,buffer);
+        strip(buffer);
         //block all access to the thread array while checking for free spots and adding
         //a thread to it
         pthread_mutex_lock(&mutex);
@@ -129,12 +130,16 @@ void * ChatThread(void * arg)
     /*added by james felts*/
     int recved = 0;
     int sended = 0;
+    int nameLen = strlen(data->Cinfo.nameOfClient);
     bool connected = true;
-
+    char sendBuffer[MAX+MAX] = "";
+	
     while(connected && killed == false)
     {
         recved = recv(data->socket,data->buffer,MAX,0);
-
+		memcpy(sendBuffer,data->Cinfo.nameOfClient,nameLen);
+		memcpy(sendBuffer+nameLen,": ",2);
+		memcpy(sendBuffer+nameLen+2,data->buffer,strlen(data->buffer)+1);
         //scanf("%i",&recved);
         if(recved == -1)
         {
@@ -148,7 +153,7 @@ void * ChatThread(void * arg)
         {
             if(threadsInfo[i]!=NULL)
             {
-                sended = send(threadsInfo[i]->socket,data->buffer,MAX,0);
+                sended = send(threadsInfo[i]->socket,sendBuffer,MAX,0);
                 printf("Send to %s\n",threadsInfo[i]->Cinfo.nameOfClient);
             }
         }

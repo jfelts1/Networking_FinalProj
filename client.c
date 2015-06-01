@@ -9,13 +9,18 @@
 #include "dataStructs.h"
 #include <pthread.h>
 #include <stdbool.h>
+#include "commonFunctions.h"
 
 void * recieveThread(void * arg);
+extern bool killed;
+int clientSocket;
 
 int main()
 {
+	  signal(SIGINT,handle_signal);
+      signal(SIGQUIT,handle_signal);
+      killed = false;
       pthread_t thread;
-      int clientSocket;
       char buffer[MAX] = "";
       struct sockaddr_in serverAddr;
       socklen_t addr_size;
@@ -37,7 +42,7 @@ int main()
       /*---- Connect the socket to the server using the address struct ----*/
       addr_size = sizeof serverAddr;
       connect(clientSocket, (struct sockaddr *) &serverAddr, addr_size);
-      puts("enter name");
+      puts("Enter name");
       fgets(buffer,MAX,stdin);
       send(clientSocket,buffer,MAX,0);
       int * clientSocketPtr = malloc(sizeof(int));
@@ -46,7 +51,7 @@ int main()
       /*added by james felts*/
       while(strcmp(buffer,"quit\n")!=0)
       {
-            puts("Enter something");
+            puts("Enter message");
             fgets(buffer,MAX,stdin);
             send(clientSocket,buffer,MAX,0);
       }
@@ -64,9 +69,15 @@ void * recieveThread(void * arg)
         recv(clientSocket, buffer, MAX, 0);
 
         /*---- Print the received message ----*/
-        printf("Data received: %s",buffer);
+        printf("%s",buffer);
     }
 
 
     return NULL;
+}
+
+void cleanUp()
+{
+	close(clientSocket);
+	puts("CleanedUp");
 }
