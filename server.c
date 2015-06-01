@@ -11,8 +11,7 @@
 #include "fileUtil.h"
 #include "dataStructs.h"
 #include <pthread.h>
-#include <signal.h>
-#include <time.h>
+#include "commonFunctions.h"
 
 //#define MAX 1024
 #define MAX_NUM_CONNECTIONS 2
@@ -32,7 +31,7 @@ typedef struct info Info;
 pthread_t threads[MAX_NUM_CONNECTIONS];
 Info * threadsInfo[MAX_NUM_CONNECTIONS];
 pthread_mutex_t mutex;
-bool killed;
+extern bool killed;
 int welcomeSocket;
 
 
@@ -41,9 +40,6 @@ int createSocket();
 struct sockaddr_in configureSockaddr_in(int domain,int port,char * address);
 int findFreeThreadSlot();
 int recieveClientInfo(int socket, char * buffer);
-void cleanUp();
-void handle_signal(int signal);
-
 
 
 int main()
@@ -54,7 +50,7 @@ int main()
     int newSocket;
     int err = 0;
     char buffer[MAX] = "";
-
+	
     struct sockaddr_in serverAddr;
     struct sockaddr_storage serverStorage;
     socklen_t addr_size;
@@ -89,7 +85,7 @@ int main()
     {
         threadsInfo[i]=NULL;
     }
-
+	int recved = 0;
     while(true)
     {
         newSocket = accept(welcomeSocket, (struct sockaddr *) &serverStorage, &addr_size);
@@ -165,8 +161,6 @@ void * ChatThread(void * arg)
             perror("send error");
         }
     }
-
-
     return NULL;
 }
 
@@ -238,35 +232,6 @@ void cleanUp()
     pthread_mutex_unlock(&mutex);
     close(welcomeSocket);
     puts("Cleaned up");
-}
-
-void handle_signal(int signal)
-{
-    const char * signal_name;
-    sigset_t pending;
-
-    switch(signal)
-    {
-        case SIGTERM:
-            killed = true;
-            cleanUp();
-            exit(0);
-            break;
-        case SIGINT:
-            killed = true;
-            cleanUp();
-            exit(0);
-            break;
-        case SIGQUIT:
-            killed = true;
-            cleanUp();
-            exit(0);
-            break;
-        default:
-            fprintf(stderr,"Caught wrong signal: %d\n",signal);
-            return;
-    }
-
 }
 
 

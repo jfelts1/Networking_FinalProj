@@ -1,6 +1,5 @@
 all: 
-	gcc -ggdb -Wall -Wextra -o "server" server.c fileUtil.c commonFunctions.c -lpthread
-	gcc -ggdb -Wall -Wextra -o "client" client.c -lpthread
+	
 	
 server:
 	gcc -ggdb -Wall -Wextra -o "server" server.c fileUtil.c commonFunctions.c -lpthread

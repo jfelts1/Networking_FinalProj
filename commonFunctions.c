@@ -1,6 +1,13 @@
+#include "commonFunctions.h"
+#include <time.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <unistd.h>
 
-//using this function REQUIRES you to write a function named cleanUp()
-void handle_signal(int signal);
+bool killed;
 
 void handle_signal(int signal)
 {
