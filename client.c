@@ -49,12 +49,13 @@ int main()
       *clientSocketPtr = clientSocket;
       pthread_create(&thread,NULL,recieveThread,clientSocketPtr);
       /*added by james felts*/
-      while(strcmp(buffer,"quit\n")!=0)
+      while(strcmp(buffer,"/quit\n")!=0)
       {
             puts("Enter message");
             fgets(buffer,MAX,stdin);
             send(clientSocket,buffer,MAX,0);
       }
+      cleanUp();
 
       return 0;
 }
@@ -78,6 +79,8 @@ void * recieveThread(void * arg)
 
 void cleanUp()
 {
+	send(clientSocket,"/quit",MAX,0);
+	puts("Quiting chat room");
 	close(clientSocket);
 	puts("CleanedUp");
 }

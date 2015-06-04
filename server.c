@@ -40,12 +40,15 @@ int createSocket();
 struct sockaddr_in configureSockaddr_in(int domain,int port,char * address);
 int findFreeThreadSlot();
 int recieveClientInfo(int socket, char * buffer);
+void handle_client_exit(int signal);
+void sendToAllConnectedClients(char * message, Info * data);
 
 
 int main()
 {
     signal(SIGINT,handle_signal);
     signal(SIGQUIT,handle_signal);
+    signal(SIGPIPE,handle_client_exit);
     killed = false;
     int newSocket;
     int err = 0;
@@ -133,10 +136,24 @@ void * ChatThread(void * arg)
     int nameLen = strlen(data->Cinfo.nameOfClient);
     bool connected = true;
     char sendBuffer[MAX+MAX] = "";
+    char tempBuf[MAX] = "";
 	
     while(connected && killed == false)
     {
         recved = recv(data->socket,data->buffer,MAX,0);
+        if(strcmp("/quit",data->buffer)==0)
+        {
+			int len = strlen(data->Cinfo.nameOfClient);
+			memcpy(tempBuf,data->Cinfo.nameOfClient,len);
+			memcpy(tempBuf+len," quit the room\n",strlen(" quit the room\n")+1);
+			printf("%s",tempBuf);
+			sendToAllConnectedClients(tempBuf,data);
+			
+			close(data->socket);
+			connected = false;
+			return NULL;
+		}
+		
 		memcpy(sendBuffer,data->Cinfo.nameOfClient,nameLen);
 		memcpy(sendBuffer+nameLen,": ",2);
 		memcpy(sendBuffer+nameLen+2,data->buffer,strlen(data->buffer)+1);
@@ -147,26 +164,38 @@ void * ChatThread(void * arg)
         }
         printf("reveived from %s: %s",data->Cinfo.nameOfClient,data->buffer);
         /*---- Send message to the socket of the incoming connection ----*/
-
-        int i = 0;
-        for(i = 0;i<MAX_NUM_CONNECTIONS;i++)
-        {
-            if(threadsInfo[i]!=NULL)
-            {
-                sended = send(threadsInfo[i]->socket,sendBuffer,MAX,0);
-                printf("Send to %s\n",threadsInfo[i]->Cinfo.nameOfClient);
-            }
-        }
+		sendToAllConnectedClients(sendBuffer,data);
+        
 
 
         //sended = send(data->socket,returnMessage,MAX,0);
 
-        if(sended == -1)
-        {
-            perror("send error");
-        }
+        
     }
     return NULL;
+}
+
+void sendToAllConnectedClients(char * message, Info * data)
+{
+	int i = 0;
+	int sended = 0;
+    for(i = 0;i<MAX_NUM_CONNECTIONS;i++)
+    {
+        if(threadsInfo[i]!=NULL)
+        {
+			if(strcmp(threadsInfo[i]->Cinfo.nameOfClient,data->Cinfo.nameOfClient) != 0)
+			{
+				sended = send(threadsInfo[i]->socket,message,MAX,0);
+				//printf("Send to %s\n",threadsInfo[i]->Cinfo.nameOfClient);
+			}
+                
+        }
+    }
+    
+    if(sended == -1)
+    {
+        perror("send error");
+    }
 }
 
 int createSocket(int domain, int type, int protocol)
@@ -237,6 +266,14 @@ void cleanUp()
     pthread_mutex_unlock(&mutex);
     close(welcomeSocket);
     puts("Cleaned up");
+}
+
+void handle_client_exit(int signal)
+{
+	if(signal == SIGPIPE)
+	{
+		
+	}
 }
 
 
