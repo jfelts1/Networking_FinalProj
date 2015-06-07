@@ -14,34 +14,23 @@
 #include "commonFunctions.h"
 
 //#define MAX 1024
-#define MAX_NUM_CONNECTIONS 2
 
-struct info
-{
-    int socket;
-    char buffer[MAX];
-    ClientInfo Cinfo;
-
-    int threadIndexNum;
-};
-
-typedef struct info Info;
-
-//Maximum number of threads and therefore connections allowed to server
-pthread_t threads[MAX_NUM_CONNECTIONS];
-Info * threadsInfo[MAX_NUM_CONNECTIONS];
+ChatRoom * defaultChatRoom;
 pthread_mutex_t mutex;
+pthread_t zombieKillingThread;
 extern bool killed;
 int welcomeSocket;
 
 
 void * ChatThread(void * arg);
-int createSocket();
+void * KillZombieThreadsThread(void * arg);
+
 struct sockaddr_in configureSockaddr_in(int domain,int port,char * address);
 int findFreeThreadSlot();
 int recieveClientInfo(int socket, char * buffer);
 void handle_client_exit(int signal);
-void sendToAllConnectedClients(char * message, Info * data);
+void sendToAllConnectedClients(char * message, ClientInfo * data);
+
 
 
 int main()
@@ -49,6 +38,9 @@ int main()
     signal(SIGINT,handle_signal);
     signal(SIGQUIT,handle_signal);
     signal(SIGPIPE,handle_client_exit);
+    defaultChatRoom = (ChatRoom *)malloc(sizeof(ChatRoom));
+    char defaultChatRoomName[MAX] = "default chat room";
+    memcpy(defaultChatRoom->nameOfChatRoom,defaultChatRoomName,strlen(defaultChatRoomName)+1);
     killed = false;
     int newSocket;
     int err = 0;
@@ -82,13 +74,14 @@ int main()
     int i = 0;
     for(i=0;i<MAX_NUM_CONNECTIONS;i++)
     {
-        threads[i] = 0;
+        defaultChatRoom->threads[i] = 0;
     }
     for(i=0;i<MAX_NUM_CONNECTIONS;i++)
     {
-        threadsInfo[i]=NULL;
+        defaultChatRoom->threadsInfo[i]=NULL;
     }
 	int recved = 0;
+	pthread_create(&zombieKillingThread,NULL,KillZombieThreadsThread,NULL);
     while(true)
     {
         newSocket = accept(welcomeSocket, (struct sockaddr *) &serverStorage, &addr_size);
@@ -102,15 +95,16 @@ int main()
         if(freeThread != -1)
         {
             printf("Connecting to %s\n",buffer);
-            Info * data = malloc(sizeof(Info));
+            ClientInfo * data = malloc(sizeof(ClientInfo));
 
             //strcpy(data->buffer,buffer);
             data->socket = newSocket;
             data->threadIndexNum = freeThread;
-            strcpy(data->Cinfo.nameOfClient,buffer);
-            threadsInfo[freeThread] = data;
+            data->connected = true;
+            strcpy(data->nameOfClient,buffer);
+            defaultChatRoom->threadsInfo[freeThread] = data;
 
-            pthread_create(&threads[freeThread],NULL,ChatThread,(void *)data);
+            pthread_create(&(defaultChatRoom->threads[freeThread]),NULL,ChatThread,(void *)data);
         }
         else
         {
@@ -126,14 +120,13 @@ int main()
 
 void * ChatThread(void * arg)
 {
-    Info * data = (Info *)arg;
+    ClientInfo * data = (ClientInfo *)arg;
 
     char returnMessage[MAX] = "";
-    printf("Connected to %s\n",data->Cinfo.nameOfClient);
-    /*added by james felts*/
+    printf("Connected to %s\n",data->nameOfClient);
     int recved = 0;
     int sended = 0;
-    int nameLen = strlen(data->Cinfo.nameOfClient);
+    int nameLen = strlen(data->nameOfClient);
     bool connected = true;
     char sendBuffer[MAX+MAX] = "";
     char tempBuf[MAX] = "";
@@ -143,18 +136,18 @@ void * ChatThread(void * arg)
         recved = recv(data->socket,data->buffer,MAX,0);
         if(strcmp("/quit",data->buffer)==0)
         {
-			int len = strlen(data->Cinfo.nameOfClient);
-			memcpy(tempBuf,data->Cinfo.nameOfClient,len);
+			int len = strlen(data->nameOfClient);
+			memcpy(tempBuf,data->nameOfClient,len);
 			memcpy(tempBuf+len," quit the room\n",strlen(" quit the room\n")+1);
 			printf("%s",tempBuf);
 			sendToAllConnectedClients(tempBuf,data);
 			
 			close(data->socket);
-			connected = false;
+			data->connected = false;
 			return NULL;
 		}
 		
-		memcpy(sendBuffer,data->Cinfo.nameOfClient,nameLen);
+		memcpy(sendBuffer,data->nameOfClient,nameLen);
 		memcpy(sendBuffer+nameLen,": ",2);
 		memcpy(sendBuffer+nameLen+2,data->buffer,strlen(data->buffer)+1);
         //scanf("%i",&recved);
@@ -162,7 +155,7 @@ void * ChatThread(void * arg)
         {
             perror("recv error");
         }
-        printf("reveived from %s: %s",data->Cinfo.nameOfClient,data->buffer);
+        printf("reveived from %s: %s",data->nameOfClient,data->buffer);
         /*---- Send message to the socket of the incoming connection ----*/
 		sendToAllConnectedClients(sendBuffer,data);
         
@@ -175,17 +168,43 @@ void * ChatThread(void * arg)
     return NULL;
 }
 
-void sendToAllConnectedClients(char * message, Info * data)
+void * KillZombieThreadsThread(void * arg)
+{
+	while(true)
+	{
+		sleep(1);
+		int i = 0;
+		pthread_mutex_lock(&mutex);
+		for(i=0;i<MAX_NUM_CONNECTIONS;i++)
+		{
+			if(defaultChatRoom->threadsInfo[i]!=NULL)
+			{
+				if(defaultChatRoom->threadsInfo[i]->connected == false)
+				{
+					pthread_join(defaultChatRoom->threads[i],NULL);
+					defaultChatRoom->threads[i]=0;
+					free(defaultChatRoom->threadsInfo[i]);
+					defaultChatRoom->threadsInfo[i]=NULL;
+				}
+			}
+		}
+		pthread_mutex_unlock(&mutex);
+		
+	}
+	return NULL;
+}
+
+void sendToAllConnectedClients(char * message, ClientInfo * data)
 {
 	int i = 0;
 	int sended = 0;
     for(i = 0;i<MAX_NUM_CONNECTIONS;i++)
     {
-        if(threadsInfo[i]!=NULL)
+        if(defaultChatRoom->threadsInfo[i]!=NULL)
         {
-			if(strcmp(threadsInfo[i]->Cinfo.nameOfClient,data->Cinfo.nameOfClient) != 0)
+			if(strcmp(defaultChatRoom->threadsInfo[i]->nameOfClient,data->nameOfClient) != 0 && defaultChatRoom->threadsInfo[i]->connected == true)
 			{
-				sended = send(threadsInfo[i]->socket,message,MAX,0);
+				sended = send(defaultChatRoom->threadsInfo[i]->socket,message,MAX,0);
 				//printf("Send to %s\n",threadsInfo[i]->Cinfo.nameOfClient);
 			}
                 
@@ -198,17 +217,7 @@ void sendToAllConnectedClients(char * message, Info * data)
     }
 }
 
-int createSocket(int domain, int type, int protocol)
-{
-    int welcomeSocket = socket(domain, type, protocol);
-    if(welcomeSocket == -1)
-    {
-        perror("Couldn't create socket");
-        exit(EXIT_FAILURE);
-    }
 
-    return welcomeSocket;
-}
 
 struct sockaddr_in configureSockaddr_in(int domain,int port, char * address)
 {
@@ -228,14 +237,14 @@ struct sockaddr_in configureSockaddr_in(int domain,int port, char * address)
 int findFreeThreadSlot()
 {
     int i = 0;
-    for(i=0;i<MAX;i++)
+    for(i=0;i<MAX_NUM_CONNECTIONS;i++)
     {
-        if(threads[i]==0)
+        if(defaultChatRoom->threads[i]==0)
         {
+			printf("thread index:%i\n",i);
             return i;
         }
     }
-
     //no free threads
     return -1;
 }
@@ -257,14 +266,15 @@ void cleanUp()
     pthread_mutex_lock(&mutex);
     for(i = 0;i<MAX_NUM_CONNECTIONS;i++)
     {
-        if(threadsInfo[i]!=NULL)
+        if(defaultChatRoom->threadsInfo[i]!=NULL)
         {
-            close(threadsInfo[i]->socket);
-            free(threadsInfo[i]);
+            close(defaultChatRoom->threadsInfo[i]->socket);
+            free(defaultChatRoom->threadsInfo[i]);
         }
     }
     pthread_mutex_unlock(&mutex);
     close(welcomeSocket);
+    free(defaultChatRoom);
     puts("Cleaned up");
 }
 

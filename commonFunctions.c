@@ -1,4 +1,7 @@
 #include "commonFunctions.h"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <time.h>
 #include <signal.h>
 #include <stdio.h>
@@ -36,4 +39,18 @@ void handle_signal(int signal)
             return;
     }
 }
+
+int createSocket(int domain, int type, int protocol)
+{
+    int welcomeSocket = socket(domain, type, protocol);
+    if(welcomeSocket == -1)
+    {
+        perror("Couldn't create socket");
+        exit(EXIT_FAILURE);
+    }
+
+    return welcomeSocket;
+}
+
+
 

@@ -27,7 +27,8 @@ int main()
 
       /*---- Create the socket. The three arguments are: ----*/
       /* 1) Internet domain 2) Stream socket 3) Default protocol (TCP in this case) */
-      clientSocket = socket(PF_INET, SOCK_STREAM, 0);
+      //clientSocket = socket(PF_INET, SOCK_STREAM, 0);
+      clientSocket = createSocket(PF_INET,SOCK_STREAM,0);
 
       /*---- Configure settings of the server address struct ----*/
       /* Address family = Internet */
